@@ -5,7 +5,7 @@
 ====================================================== */
 
 const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+  import.meta.env.VITE_BACKEND_URL || 'https://new-agriseal.onrender.com';
 
 /* ======================================================
    TYPES
