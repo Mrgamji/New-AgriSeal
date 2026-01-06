@@ -28,6 +28,9 @@ app.use(cors({
         'http://localhost:5173', 
         'http://192.168.1.251:5174',// Vite default port
         'http://192.168.1.251:5173',
+        'http://newagriseal.netlify.app',
+        'http://agriseal.com.ng',
+          
         process.env.FRONTEND_URL
       ].filter(Boolean);
       
