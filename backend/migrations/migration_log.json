@@ -1,0 +1,12 @@
+{
+  "migrations": [
+    {
+      "id": 1766333297804,
+      "name": "initial_schema_setup",
+      "timestamp": "2025-12-21T16:08:17.804Z",
+      "description": "Initial database schema for Agricultural AI System"
+    }
+  ],
+  "last_updated": "2025-12-21T16:08:17.804Z",
+  "version": "1.0.0"
+}
