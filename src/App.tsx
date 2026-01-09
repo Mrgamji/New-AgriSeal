@@ -106,12 +106,12 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
         <div className="space-y-6">
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">1. Acceptance of Terms</h3>
-            <p className="text-gray-700">By accessing and using AgriSeal AI, you accept and agree to be bound by the terms and provision of this agreement.</p>
+            <p className="text-gray-700">By accessing and using AgriSeal, you accept and agree to be bound by the terms and provision of this agreement.</p>
           </section>
 
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">2. Service Description</h3>
-            <p className="text-gray-700">AgriSeal AI provides agricultural diagnostic services through artificial intelligence analysis of uploaded images.</p>
+            <p className="text-gray-700">AgriSeal provides agricultural diagnostic services through artificial intelligence analysis of uploaded images.</p>
           </section>
 
           <section>
@@ -126,12 +126,12 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
 
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">4. Intellectual Property</h3>
-            <p className="text-gray-700">All content, features, and functionality are owned by AgriSeal AI and are protected by international copyright, trademark, and other intellectual property laws.</p>
+            <p className="text-gray-700">All content, features, and functionality are owned by AgriSeal and are protected by international copyright, trademark, and other intellectual property laws.</p>
           </section>
 
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">5. Limitation of Liability</h3>
-            <p className="text-gray-700">AgriSeal AI shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.</p>
+            <p className="text-gray-700">AgriSeal shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the service.</p>
           </section>
         </div>
       </div>
@@ -208,7 +208,7 @@ const PrivacyModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
 
         <section>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Rights</h3>
-          <p className="text-gray-700">You have the right to access, correct, or delete your personal data at any time. Contact us at privacy@agriseal.ai for data requests.</p>
+          <p className="text-gray-700">You have the right to access, correct, or delete your personal data at any time. Contact us at privacy@agriseal.com.ng for data requests.</p>
         </section>
       </div>
       <div className="sticky bottom-0 bg-gradient-to-r from-blue-50 to-indigo-50 border-t border-blue-100 p-6">
@@ -246,8 +246,8 @@ const ContactModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
             </div>
             <h3 className="font-semibold text-gray-900 mb-2">Email Support</h3>
             <p className="text-gray-600 mb-3">For general inquiries and support</p>
-            <a href="mailto:support@agriseal.ai" className="text-emerald-600 font-medium hover:text-emerald-700 inline-flex items-center gap-1">
-              support@agriseal.ai
+            <a href="mailto:support@agriseal.com.ng" className="text-emerald-600 font-medium hover:text-emerald-700 inline-flex items-center gap-1">
+              support@agriseal.com.ng
               <ExternalLink className="w-4 h-4" />
             </a>
           </div>
@@ -258,8 +258,8 @@ const ContactModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
             </div>
             <h3 className="font-semibold text-gray-900 mb-2">Sales & Business</h3>
             <p className="text-gray-600 mb-3">For enterprise plans and partnerships</p>
-            <a href="mailto:sales@agriseal.ai" className="text-blue-600 font-medium hover:text-blue-700 inline-flex items-center gap-1">
-              sales@agriseal.ai
+            <a href="mailto:sales@agriseal.com.ng" className="text-blue-600 font-medium hover:text-blue-700 inline-flex items-center gap-1">
+              sales@agriseal.com.ng
               <ExternalLink className="w-4 h-4" />
             </a>
           </div>
@@ -288,10 +288,10 @@ const ContactModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
 
         <div className="mt-8 bg-gray-50 rounded-xl p-6">
           <h3 className="font-semibold text-gray-900 mb-4">Office Location</h3>
-          <p className="text-gray-700 mb-2">AgriSeal AI Headquarters</p>
-          <p className="text-gray-600">123 Innovation Drive</p>
-          <p className="text-gray-600">San Francisco, CA 94107</p>
-          <p className="text-gray-600">United States</p>
+          <p className="text-gray-700 mb-2">AgriSeal Office</p>
+          <p className="text-gray-600">123 448 BUK</p>
+          <p className="text-gray-600">Kabuga Housing Estate, Kano</p>
+          <p className="text-gray-600">Nigeria</p>
         </div>
       </div>
       <div className="sticky bottom-0 bg-gradient-to-r from-orange-50 to-amber-50 border-t border-orange-100 p-6">
@@ -384,7 +384,7 @@ const SupportModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
         <div className="mt-8 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100">
           <h3 className="font-semibold text-gray-900 mb-3">Need Immediate Help?</h3>
           <p className="text-gray-700 mb-4">Our team is available 24/7 for critical issues affecting your agricultural operations.</p>
-          <a href="mailto:emergency@agriseal.ai" className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+          <a href="mailto:emergency@agriseal.com.ng" className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
             <AlertCircle className="w-4 h-4" />
             Emergency Support
           </a>
@@ -609,7 +609,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 bg-gradient-to-r from-green-700 to-emerald-800 bg-clip-text text-transparent">
-                  AgriSeal AI
+                  AgriSeal
                 </h1>
                 <p className="text-sm text-gray-500 font-medium">Professional Agricultural Diagnostics</p>
               </div>
@@ -898,7 +898,7 @@ function App() {
                       <img src={LOGO_SRC} alt="AgriSeal Logo" className="w-8 h-8 object-contain" />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-gray-900">Powered by AgriSeal AI</h4>
+                      <h4 className="font-semibold text-gray-900">Powered by AgriSeal</h4>
                       <p className="text-sm text-gray-600">95% accurate agricultural diagnostics</p>
                     </div>
                   </div>
@@ -1021,7 +1021,7 @@ function App() {
                   <img src={LOGO_SRC} alt="AgriSeal Logo" className="w-8 h-8 object-contain" />
                 </div>
                 <div>
-                  <span className="text-2xl font-bold">AgriSeal AI</span>
+                  <span className="text-2xl font-bold">AgriSeal</span>
                   <p className="text-gray-400 text-sm">Professional Agricultural Diagnostics</p>
                 </div>
               </div>
@@ -1123,7 +1123,7 @@ function App() {
           <div className="border-t border-gray-800 pt-8">
             <div className="flex flex-col md:flex-row justify-between items-center">
               <p className="text-gray-500 text-sm text-center md:text-left mb-4 md:mb-0">
-                © {new Date().getFullYear()} AgriSeal AI. All rights reserved.
+                © {new Date().getFullYear()} AgriSeal. All rights reserved.
               </p>
               <div className="flex gap-4">
                 <a href="#" className="text-gray-400 hover:text-white transition-colors">
