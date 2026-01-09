@@ -38,12 +38,19 @@ export type RecommendationGroup = {
 // DetectionResult type supporting both backend and frontend structures
 export interface DetectionResult {
   // These are always present for an analysis result
-  status: 'healthy' | 'infected' | 'critical' | 'invalid' | string;
+  status: 'healthy' | 'infected' | 'critical' | 'invalid' | 'unclear' | 'rejected' | string;
   title: string;
   message: string;
   confidence: number;
   color: string;
   timestamp: string;
+
+  // New fields added for GPT-based analysis
+  isAgricultural?: boolean;
+  isClear?: boolean;
+  riskLevel?: 'low' | 'medium' | 'high' | 'none' | 'unknown' | string;
+  additionalNotes?: string;
+  source?: string;
 
   // Some extended properties for results record display and matching API models
   id?: number; // DB record id if applicable
@@ -64,6 +71,10 @@ export interface DetectionResult {
     confidence: number;
     color: string;
     processingSteps?: ProcessingStep[];
+    isAgricultural?: boolean;
+    isClear?: boolean;
+    riskLevel?: string;
+    additionalNotes?: string;
   };
 }
 

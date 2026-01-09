@@ -1,4 +1,4 @@
-// backend/src/services/ai-service.js - COMPLETE FIXED VERSION
+// backend/src/services/ai-service.js - UPDATED WITH CROP IDENTIFICATION
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,30 +7,17 @@ import OpenAI from 'openai';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Check if OpenAI API key is properly configured
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// Declare openai variable at the top level
+console.log('🤖 AI Service Initializing (Enhanced GPT Mode)...');
+
 let openai;
 
 if (!OPENAI_API_KEY) {
   console.error('❌ ERROR: OPENAI_API_KEY environment variable is not set.');
-  console.error('Please set a valid OpenAI API key in your environment variables.');
-  console.error('For development, create a .env file with: OPENAI_API_KEY=your-api-key-here');
-  
-  // Create a mock OpenAI client that will fail gracefully
-  openai = {
-    chat: {
-      completions: {
-        create: async () => {
-          throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY in your environment.');
-        }
-      }
-    }
-  };
+  throw new Error('OpenAI API key not configured.');
 } else {
-  // Initialize OpenAI with the valid API key
-  console.log('✅ OpenAI API key is configured');
+  console.log('✅ OpenAI API key configured');
   openai = new OpenAI({
     apiKey: OPENAI_API_KEY,
   });
@@ -44,30 +31,146 @@ const imageToBase64 = (filePath) => {
     const buffer = fs.readFileSync(filePath);
     return buffer.toString('base64');
   } catch (e) {
-    console.error('Error reading file for base64:', e);
+    console.error(`Error reading file:`, e.message);
     return null;
   }
 };
 
 /**
- * Main AI analysis function using GPT-4 Vision
+ * Get specialized prompt based on category
+ */
+const getSpecializedPrompt = (category, cropType) => {
+  const categoryPrompts = {
+    crops: `You are an expert agricultural scientist specializing in plant pathology and crop identification.
+
+CRITICAL ANALYSIS STEPS:
+1. FIRST, determine if this is an AGRICULTURAL image:
+   - YES: Plants, crops, leaves, stems, fruits, vegetables, agricultural fields
+   - NO: Buildings, cars, people, pets, furniture, random objects, non-agricultural scenes
+
+2. IF AGRICULTURAL, identify the CROP TYPE if possible:
+   - Examples: Tomato, Corn, Rice, Wheat, Potato, Apple, Grape, Lettuce, etc.
+   - If unsure, say "Unidentified crop"
+
+3. THEN assess image CLARITY:
+   - Clear: Well-lit, focused, shows details
+   - Unclear: Blurry, dark, too distant, poor quality
+
+4. ONLY THEN analyze HEALTH STATUS
+
+Return ONLY valid JSON with this EXACT structure:
+
+{
+  "isAgriculturalImage": true or false,
+  "imageClear": true or false,
+  "identifiedCrop": "Specific crop name or 'Unidentified'",
+  "status": "healthy", "infected", "critical", or "unclear",
+  "title": "Brief descriptive title",
+  "message": "Clear 2-3 sentence analysis",
+  "confidence": number between 0-100,
+  "diseaseType": "Specific disease name or 'Healthy' or 'Not agricultural'",
+  "severity": number between 0-10,
+  "riskLevel": "low", "medium", "high", or "none",
+  "recommendations": ["Practical action 1", "Action 2", "Action 3", "Action 4", "Action 5"],
+  "additionalNotes": "Any important notes about crop type, image quality, or limitations"
+}
+
+IMPORTANT RULES:
+1. If NOT agricultural: "isAgriculturalImage": false, "status": "rejected", "confidence": 0
+2. If unclear: "imageClear": false, lower confidence
+3. Be SPECIFIC about crop names: "Tomato plants", "Corn field", "Rice paddy"
+4. NEVER guess or make up diseases - if unsure, say "Unclear" or "Cannot determine"`,
+
+    livestock: `You are an expert veterinarian specializing in livestock health.
+
+CRITICAL ANALYSIS STEPS:
+1. FIRST, determine if this is LIVESTOCK:
+   - YES: Cattle, sheep, goats, pigs, poultry, horses, other farm animals
+   - NO: Pets, wild animals, people, buildings, non-livestock scenes
+
+2. IF LIVESTOCK, identify the SPECIES if possible:
+   - Examples: Dairy cow, Sheep, Goat, Pig, Chicken, Turkey
+   - If unsure, say "Unidentified livestock"
+
+3. THEN assess image CLARITY
+
+4. ONLY THEN analyze HEALTH STATUS
+
+Return ONLY valid JSON with this EXACT structure:
+
+{
+  "isAgriculturalImage": true or false,
+  "imageClear": true or false,
+  "identifiedSpecies": "Specific species or 'Unidentified'",
+  "status": "healthy", "infected", "critical", or "unclear",
+  "title": "Brief descriptive title",
+  "message": "Clear 2-3 sentence analysis",
+  "confidence": number between 0-100,
+  "healthIssue": "Specific issue name or 'Healthy' or 'Not livestock'",
+  "severity": number between 0-10,
+  "riskLevel": "low", "medium", "high", or "none",
+  "recommendations": ["Practical action 1", "Action 2", "Action 3", "Action 4", "Action 5"],
+  "additionalNotes": "Any important notes"
+}`,
+
+    fishery: `You are an expert aquaculture specialist.
+
+CRITICAL ANALYSIS STEPS:
+1. FIRST, determine if this is FISHERY/AQUACULTURE:
+   - YES: Fish, shrimp, aquaculture, aquatic species, fish farms
+   - NO: Pets, wild animals, people, non-aquatic scenes
+
+2. IF FISHERY, identify the SPECIES if possible:
+   - Examples: Tilapia, Salmon, Trout, Shrimp, Carp, Catfish
+   - If unsure, say "Unidentified aquatic species"
+
+3. THEN assess image CLARITY
+
+4. ONLY THEN analyze HEALTH STATUS
+
+Return ONLY valid JSON with this EXACT structure:
+
+{
+  "isAgriculturalImage": true or false,
+  "imageClear": true or false,
+  "identifiedSpecies": "Specific species or 'Unidentified'",
+  "status": "healthy", "infected", "critical", or "unclear",
+  "title": "Brief descriptive title",
+  "message": "Clear 2-3 sentence analysis",
+  "confidence": number between 0-100,
+  "issueType": "Specific issue name or 'Healthy' or 'Not fishery'",
+  "severity": number between 0-10,
+  "riskLevel": "low", "medium", "high", or "none",
+  "recommendations": ["Practical action 1", "Action 2", "Action 3", "Action 4", "Action 5"],
+  "additionalNotes": "Any important notes"
+}`
+  };
+
+  const basePrompt = categoryPrompts[category] || categoryPrompts.crops;
+  const userCrop = cropType ? `User reported crop type: ${cropType}. Please verify or identify the actual crop from the image.` : '';
+  
+  return `${basePrompt}\n\n${userCrop}\n\nReturn ONLY the JSON object, no other text.`;
+};
+
+/**
+ * Main AI analysis function
  */
 export async function analyzeCropImagesWithGPT(imagePaths, category = 'crops', cropType = '') {
-  console.log(`[AI] Starting analysis for ${imagePaths.length} image(s), category: ${category}, crop: ${cropType}`);
+  console.log(`🔍 Starting enhanced GPT analysis for ${category}, user crop: ${cropType}`);
   
   try {
-    // If no API key, return a mock response for development
+    // Validate we have API key
     if (!OPENAI_API_KEY) {
-      console.log('[AI] ⚠️ No OpenAI API key - returning development mock response');
-      return generateMockResponse(category, cropType);
+      throw new Error('This is on us, we will not charge you.');
     }
 
-    // Convert images to base64
+    // Process images
     const imageContents = [];
+    
     for (const imagePath of imagePaths) {
       const b64 = imageToBase64(imagePath);
       if (!b64) {
-        console.warn(`[AI] Warning: Could not encode image ${imagePath}`);
+        console.warn(`Skipping image ${imagePath}: Could not encode`);
         continue;
       }
       
@@ -90,24 +193,13 @@ export async function analyzeCropImagesWithGPT(imagePaths, category = 'crops', c
       throw new Error('No valid images could be processed');
     }
 
-    console.log(`[AI] Sending request to OpenAI with ${imageContents.length} image(s)`);
-
-    // Simple prompt for faster response
-    const promptText = `Analyze this ${category} image and return JSON with:
-{
-  "status": "healthy", "infected", or "critical",
-  "title": "Brief title",
-  "message": "2 sentence analysis",
-  "confidence": 0-100,
-  "diseaseType": "Specific name or 'Healthy'",
-  "severity": 0-10,
-  "recommendations": ["Action 1", "Action 2", "Action 3"]
-}`;
-
+    // Prepare messages
+    const promptText = getSpecializedPrompt(category, cropType);
+    
     const messages = [
       {
         role: "system",
-        content: "You are an agricultural expert. Return ONLY valid JSON."
+        content: "You are an agricultural expert. You MUST return ONLY valid JSON. Never include any other text. Be honest about what you see."
       },
       {
         role: "user",
@@ -118,234 +210,135 @@ export async function analyzeCropImagesWithGPT(imagePaths, category = 'crops', c
       }
     ];
 
+    console.log(`📤 Sending ${imageContents.length} image(s) to OpenAI`);
+    
+    // Call OpenAI with error handling
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Using cheaper/faster model
+      model: "gpt-4o-mini",
       messages: messages,
-      max_tokens: 500,
+      max_tokens: 1000,
       temperature: 0.1,
       response_format: { type: "json_object" }
     });
 
+    // Get and parse response
     const rawContent = response.choices?.[0]?.message?.content || "{}";
-    console.log(`[AI] Received OpenAI response (${rawContent.length} chars)`);
+    console.log('📥 Received GPT response');
     
     let parsedResult;
     try {
       parsedResult = JSON.parse(rawContent);
+      console.log('✅ JSON parsed successfully');
     } catch (parseError) {
-      console.error('[AI] JSON parse error:', parseError);
-      console.error('[AI] Raw response:', rawContent);
-      
-      // Fallback to mock response if JSON parsing fails
-      return generateMockResponse(category, cropType);
+      console.error('❌ GPT returned invalid JSON:', rawContent.substring(0, 200));
+      throw new Error('AI analysis failed - invalid response format');
     }
 
-    // Build result object
-    const result = {
-      status: parsedResult.status || 'unknown',
-      title: parsedResult.title || getTitleForStatus(parsedResult.status, category, cropType),
-      message: parsedResult.message || 'AI analysis completed successfully.',
-      confidence: Math.max(0, Math.min(100, parsedResult.confidence || 75)),
-      color: getColorForStatus(parsedResult.status),
-      diseaseType: parsedResult.diseaseType || 'Unknown',
-      severity: Math.max(0, Math.min(10, parsedResult.severity || 0)),
-      recommendations: Array.isArray(parsedResult.recommendations) && parsedResult.recommendations.length > 0
-        ? parsedResult.recommendations
-        : getDefaultRecommendations(category),
-      source: 'openai-gpt-4o-mini',
-      processingSteps: [
-        { step: 'Image Upload & Validation', completed: true, duration: 2000 },
-        { step: 'AI Vision Analysis', completed: true, duration: 8000 },
-        { step: 'Disease Pattern Recognition', completed: true, duration: 5000 },
-        { step: 'Treatment Recommendation Generation', completed: true, duration: 3000 },
-      ],
-    };
+    // Validate GPT response structure
+    if (typeof parsedResult !== 'object' || parsedResult === null) {
+      throw new Error('AI returned invalid response structure');
+    }
 
-    console.log(`[AI] Successfully parsed result: ${result.status} (${result.confidence}% confidence)`);
-    return result;
+    // Log what GPT returned
+    console.log('🤔 GPT Analysis Results:', {
+      isAgricultural: parsedResult.isAgriculturalImage,
+      imageClear: parsedResult.imageClear,
+      identifiedCrop: parsedResult.identifiedCrop || parsedResult.identifiedSpecies,
+      status: parsedResult.status,
+      confidence: parsedResult.confidence
+    });
+
+    // If GPT says it's not agricultural, handle accordingly
+    if (parsedResult.isAgriculturalImage === false) {
+      console.log('🚫 GPT detected NON-AGRICULTURAL image');
+      return {
+        isAgricultural: false,
+        isClear: parsedResult.imageClear !== false,
+        identifiedCrop: 'Not applicable',
+        message: parsedResult.message || "This image doesn't appear to contain agricultural/livestock/fishery content. Please upload relevant images.",
+        confidence: 0,
+        status: 'rejected',
+        title: 'Non-Agricultural Image',
+        diseaseType: 'Not agricultural',
+        source: 'openai-gpt-4o-mini',
+        rawAnalysis: parsedResult
+      };
+    }
+
+    // If image is unclear
+    if (parsedResult.imageClear === false) {
+      console.log('⚠️ GPT detected UNCLEAR image');
+      return {
+        isClear: false,
+        isAgricultural: true,
+        identifiedCrop: parsedResult.identifiedCrop || parsedResult.identifiedSpecies || 'Unidentified',
+        message: parsedResult.message || "The image quality is insufficient for reliable analysis.",
+        confidence: parsedResult.confidence || 30,
+        status: 'unclear',
+        title: 'Image Quality Issue',
+        diseaseType: parsedResult.diseaseType || parsedResult.healthIssue || parsedResult.issueType || 'Cannot determine',
+        recommendations: parsedResult.recommendations || ['Upload clearer image'],
+        additionalNotes: parsedResult.additionalNotes || '',
+        source: 'openai-gpt-4o-mini',
+        rawAnalysis: parsedResult
+      };
+    }
+
+    // Successfully analyzed agricultural image
+    console.log(`✅ GPT analysis complete: ${parsedResult.status}, ${parsedResult.confidence}% confidence`);
+    console.log(`🌱 Identified crop/species: ${parsedResult.identifiedCrop || parsedResult.identifiedSpecies || 'Unidentified'}`);
+    
+    return {
+      status: parsedResult.status || 'unknown',
+      title: parsedResult.title || `${category} Analysis`,
+      message: parsedResult.message || 'Analysis completed',
+      confidence: Math.max(0, Math.min(100, parsedResult.confidence || 50)),
+      diseaseType: parsedResult.diseaseType || parsedResult.healthIssue || parsedResult.issueType || 'Unknown',
+      identifiedCrop: parsedResult.identifiedCrop || parsedResult.identifiedSpecies || 'Unidentified',
+      severity: Math.max(0, Math.min(10, parsedResult.severity || 0)),
+      riskLevel: parsedResult.riskLevel || 'medium',
+      recommendations: Array.isArray(parsedResult.recommendations) ? 
+        parsedResult.recommendations.slice(0, 5) : [],
+      additionalNotes: parsedResult.additionalNotes || '',
+      source: 'openai-gpt-4o-mini',
+      isAgricultural: true,
+      isClear: true,
+      rawAnalysis: parsedResult
+    };
     
   } catch (error) {
-    console.error('[AI] Error:', error);
+    console.error('❌ AI Service Error:', error.message);
     
-    // Handle specific OpenAI errors
+    // Handle OpenAI-specific errors
     if (error.code === 'insufficient_quota' || 
         error.code === 'rate_limit_exceeded' ||
         error.message?.includes('quota') ||
-        error.message?.includes('rate_limit') ||
-        error.message?.includes('billing') ||
-        error.status === 429) {
-      
-      console.error('[AI] ❌ OpenAI API quota/credit limit reached');
-      const quotaError = new Error('OpenAI API quota exceeded. Service temporarily unavailable.');
-      quotaError.code = 'OPENAI_QUOTA_ERROR';
-      throw quotaError;
+        error.message?.includes('rate limit')) {
+      throw new Error('This is on us, we will not charge you.');
     }
     
-    // If OpenAI fails, return a mock response for now
-    console.log('[AI] ⚠️ OpenAI call failed, returning mock response');
-    return generateMockResponse(category, cropType);
+    // Re-throw other errors
+    throw error;
   }
 }
 
 /**
- * Generate mock response for development/testing
- */
-function generateMockResponse(category, cropType) {
-  console.log(`[AI] Generating mock response for ${category} ${cropType}`);
-  
-  const responses = {
-    crops: {
-      status: 'infected',
-      title: 'Early Stage Fungal Infection',
-      message: 'Mild fungal infection detected on leaves. Early intervention recommended to prevent spread to other plants.',
-      confidence: 87,
-      color: 'yellow',
-      diseaseType: 'Powdery Mildew',
-      severity: 3,
-      recommendations: [
-        'Remove affected leaves immediately',
-        'Apply sulfur-based fungicide',
-        'Improve air circulation around plants',
-        'Avoid overhead watering',
-        'Monitor daily for progression'
-      ]
-    },
-    livestock: {
-      status: 'healthy',
-      title: 'Animal is Healthy',
-      message: 'No signs of disease or health issues detected. The animal appears to be in good condition.',
-      confidence: 92,
-      color: 'green',
-      diseaseType: 'Healthy',
-      severity: 0,
-      recommendations: [
-        'Continue regular monitoring',
-        'Maintain proper nutrition',
-        'Ensure clean living conditions',
-        'Schedule regular veterinary check-ups'
-      ]
-    },
-    fishery: {
-      status: 'infected',
-      title: 'Parasitic Infection Detected',
-      message: 'Signs of parasitic infection observed on fish fins and skin. Early treatment recommended.',
-      confidence: 78,
-      color: 'yellow',
-      diseaseType: 'Ichthyophthirius (Ich)',
-      severity: 4,
-      recommendations: [
-        'Increase water temperature gradually',
-        'Add aquarium salt as directed',
-        'Consider anti-parasitic medication',
-        'Improve water quality',
-        'Quarantine affected fish if possible'
-      ]
-    }
-  };
-
-  const response = responses[category] || responses.crops;
-  
-  return {
-    ...response,
-    source: 'development-mock',
-    processingSteps: [
-      { step: 'Image Processing', completed: true, duration: 1500 },
-      { step: 'Feature Extraction', completed: true, duration: 2500 },
-      { step: 'Pattern Analysis', completed: true, duration: 3500 },
-      { step: 'Report Generation', completed: true, duration: 2000 }
-    ]
-  };
-}
-
-// Helper functions
-const getColorForStatus = (status) => {
-  switch(status?.toLowerCase()) {
-    case 'healthy': return 'green';
-    case 'infected': return 'yellow';
-    case 'critical': return 'red';
-    default: return 'gray';
-  }
-};
-
-const getTitleForStatus = (status, category, cropType = '') => {
-  const cropPrefix = cropType ? `${cropType} ` : '';
-  
-  switch(status?.toLowerCase()) {
-    case 'healthy':
-      return category === 'crops' ? `${cropPrefix}Crop is Healthy` :
-             category === 'livestock' ? 'Animal is Healthy' :
-             'Fish are Healthy';
-    case 'infected':
-      return category === 'crops' ? `${cropPrefix}Disease Detected` :
-             category === 'livestock' ? 'Health Issue Detected' :
-             'Infection Detected';
-    case 'critical':
-      return category === 'crops' ? `${cropPrefix}Critical Disease Alert` :
-             category === 'livestock' ? 'Critical Health Alert' :
-             'Critical Infection Alert';
-    default:
-      return 'Analysis Complete';
-  }
-};
-
-const getDefaultRecommendations = (category) => {
-  const defaults = {
-    crops: [
-      'Isolate affected plants immediately',
-      'Consult agricultural expert',
-      'Apply appropriate treatment',
-      'Improve growing conditions',
-      'Monitor progress daily'
-    ],
-    livestock: [
-      'Quarantine affected animal',
-      'Consult veterinarian',
-      'Improve sanitation',
-      'Review nutrition',
-      'Monitor vital signs'
-    ],
-    fishery: [
-      'Test water quality',
-      'Isolate affected fish',
-      'Consult aquaculture expert',
-      'Improve tank conditions',
-      'Monitor behavior'
-    ]
-  };
-  return defaults[category] || defaults.crops;
-};
-
-/**
- * Check AI system status
+ * Simple system check
  */
 export async function checkAISystem() {
   try {
-    if (!OPENAI_API_KEY) {
-      return {
-        available: false,
-        model: 'Mock System',
-        status: 'development',
-        message: 'Running in development mode with mock responses'
-      };
-    }
-    
-    // Simple test to check if OpenAI API is accessible
     await openai.models.list();
-    
     return {
       available: true,
       model: 'GPT-4 Vision',
       status: 'operational',
-      message: 'AI system is ready for analysis'
+      supports: ['crops', 'livestock', 'fishery'],
+      note: 'Enhanced GPT with crop identification'
     };
   } catch (error) {
-    console.error('[AI] System check failed:', error);
-    return {
-      available: false,
-      model: 'GPT-4 Vision',
-      status: 'degraded',
-      message: 'AI system temporarily unavailable',
-      error: error.message
-    };
+    console.error('AI System check failed:', error.message);
+    throw new Error('This is on us, we will not charge you.');
   }
 }
+
+console.log('✅ Enhanced GPT AI Service Ready\n');

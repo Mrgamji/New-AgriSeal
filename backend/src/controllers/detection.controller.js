@@ -297,13 +297,13 @@ export const getRecentDetections = async (req, res) => {
  * Detect disease in uploaded images
  */
 export const detectDisease = async (req, res) => {
-  console.log('\n🔍 [detectDisease] Detection request received');
+  console.log('\n🔍 [detectDisease] Pure GPT analysis request');
   
   try {
     const userId = req.user?.id;
     const { category = 'crops', cropType = '', description = '' } = req.body;
     
-    console.log(`[detectDisease] User: ${userId}, Category: ${category}, Crop: ${cropType}`);
+    console.log(`User: ${userId}, Category: ${category}, Crop: ${cropType}`);
     
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
@@ -312,12 +312,10 @@ export const detectDisease = async (req, res) => {
       });
     }
     
-    // Check user credits
-    console.log(`[detectDisease] Checking credits for user id ${userId}`);
+    // Validate user exists and has credits
     const user = await db.get('SELECT id, credits FROM users WHERE id = ?', [userId]);
     
     if (!user) {
-      console.log(`[detectDisease] ❌ User not found: ${userId}`);
       return res.status(404).json({
         success: false,
         error: 'USER_NOT_FOUND',
@@ -326,7 +324,6 @@ export const detectDisease = async (req, res) => {
     }
     
     if (user.credits < 1) {
-      console.log(`[detectDisease] ❌ Insufficient credits for user ${userId}: ${user.credits}`);
       return res.status(402).json({
         success: false,
         error: 'INSUFFICIENT_CREDITS',
@@ -334,36 +331,34 @@ export const detectDisease = async (req, res) => {
       });
     }
     
-    console.log(`[detectDisease] ✅ User has sufficient credits: ${user.credits}`);
+    console.log(`✅ User has credits: ${user.credits}`);
     
-    // Validate uploaded images
-    console.log('[detectDisease] Processing uploaded images');
+    // Validate images
     const validImages = [];
     
     for (const file of req.files) {
       try {
-        // Basic validation
         const stats = fs.statSync(file.path);
         const validExtensions = ['.jpg', '.jpeg', '.png', '.bmp', '.webp'];
         const ext = path.extname(file.path).toLowerCase();
         
         if (stats.size > 10 * 1024 * 1024) {
-          console.log(`[detectDisease] File too large: ${file.originalname}`);
+          console.log(`File too large: ${file.originalname}`);
           fs.unlinkSync(file.path);
           continue;
         }
         
         if (!validExtensions.includes(ext)) {
-          console.log(`[detectDisease] Invalid extension: ${file.originalname}`);
+          console.log(`Invalid extension: ${file.originalname}`);
           fs.unlinkSync(file.path);
           continue;
         }
         
         validImages.push(file.path);
-        console.log(`[detectDisease] ✅ Valid image: ${file.originalname} (${(stats.size / 1024).toFixed(1)}KB)`);
+        console.log(`✅ Valid image: ${file.originalname}`);
         
       } catch (error) {
-        console.log(`[detectDisease] Error processing file ${file.originalname}:`, error.message);
+        console.log(`Error processing file:`, error.message);
         try { fs.unlinkSync(file.path); } catch {}
       }
     }
@@ -375,74 +370,95 @@ export const detectDisease = async (req, res) => {
       });
     }
     
-    console.log(`[detectDisease] ${validImages.length} valid images. Starting AI analysis...`);
+    console.log(`${validImages.length} valid images. Starting pure GPT analysis...`);
     
     // Start AI analysis with timeout
     const startTime = Date.now();
-    console.log('[detectDisease] 🔬 Calling AI analysis...');
     
     let aiResult;
     try {
-      // Set timeout for AI analysis (30 seconds max)
       const analysisPromise = analyzeCropImagesWithGPT(validImages, category, cropType);
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('AI analysis timeout after 30 seconds')), 30000)
+        setTimeout(() => reject(new Error('AI analysis timeout after 45 seconds')), 45000)
       );
       
       aiResult = await Promise.race([analysisPromise, timeoutPromise]);
       
     } catch (aiError) {
-      console.error('[detectDisease] ❌ AI analysis error:', aiError);
+      console.error('❌ AI analysis error:', aiError);
       
-      // Check if it's a quota/credit error
-      if (aiError.code === 'OPENAI_QUOTA_ERROR' || 
-          aiError.message?.includes('quota') ||
-          aiError.message?.includes('temporarily unavailable')) {
-        console.error('[detectDisease] OpenAI quota exceeded - not charging user');
-        
-        // Clean up files
-        for (const filePath of validImages) {
-          try { fs.unlinkSync(filePath); } catch {}
-        }
-        
+      // Clean up files
+      for (const filePath of validImages) {
+        try { fs.unlinkSync(filePath); } catch {}
+      }
+      
+      // Check for quota errors - DON'T charge for quota issues
+      if (aiError.message.includes('This is on us') ||
+          aiError.code === 'OPENAI_QUOTA_ERROR') {
         return res.status(503).json({
           success: false,
           error: 'OPENAI_QUOTA_ERROR',
-          message: 'We are sorry for the inconvenience. AgriSeal\'s AI Model service is temporarily unavailable. This will not be charged to your account.'
+          message: 'We are sorry for the inconvenience. AgriSeal\'s AI Model service is temporarily unavailable. This will not be charged to your account.',
+          noCharge: true
         });
       }
       
-      // For other errors, use mock response
-      console.log('[detectDisease] ⚠️ Using fallback mock response');
-      aiResult = generateFallbackResponse(category, cropType);
+      // For other AI errors, STILL charge the user since they used the service
+      console.log('⚠️ AI failed but user will still be charged for service attempt');
+      
+      // Deduct credit even for failed AI analysis
+      await db.run('UPDATE users SET credits = credits - 1 WHERE id = ?', [userId]);
+      
+      return res.status(500).json({
+        success: false,
+        error: 'AI_ANALYSIS_FAILED',
+        message: 'AI analysis failed. Please try again with different images.',
+        charged: true,
+        creditsRemaining: user.credits - 1
+      });
     }
     
     const analysisTime = Date.now() - startTime;
     
-    console.log(`[detectDisease] ✅ AI analysis completed in ${analysisTime}ms`);
-    console.log(`[detectDisease] Status: ${aiResult.status}`);
-    console.log(`[detectDisease] Confidence: ${aiResult.confidence}%`);
-    console.log(`[detectDisease] Disease Type: ${aiResult.diseaseType || 'N/A'}`);
-    console.log(`[detectDisease] Severity: ${aiResult.severity || 'N/A'}`);
-    console.log(`[detectDisease] Recommendations: ${aiResult.recommendations?.length || 0} items`);
+    console.log(`✅ Pure GPT analysis completed in ${analysisTime}ms`);
+    console.log(`Status: ${aiResult.status}`);
+    console.log(`Confidence: ${aiResult.confidence}%`);
+    console.log(`Agricultural: ${aiResult.isAgricultural}`);
+    console.log(`Clear: ${aiResult.isClear}`);
     
-    // Deduct credit and log detection
-    console.log('[detectDisease] Beginning database transaction');
+    // Begin database transaction - ALWAYS charge for using the service
+    await db.run('BEGIN TRANSACTION');
     
     try {
-      await db.run('BEGIN TRANSACTION');
-      
-      // Deduct credit
-      console.log('[detectDisease] Deducting 1 credit from user');
+      // ALWAYS deduct credit - user used the service regardless of image type
+      console.log('💰 Deducting 1 credit for service usage');
       await db.run('UPDATE users SET credits = credits - 1 WHERE id = ?', [userId]);
       
-      // Log detection
-      console.log('[detectDisease] Logging detection to database');
+      // Prepare detection data based on result type
+      let detectionData = {
+        userId,
+        category,
+        cropType: cropType || aiResult.identifiedCrop || null, // Use GPT-identified crop if available
+        description: description || null,
+        status: aiResult.status || 'unknown',
+        confidence: aiResult.confidence || 0,
+        diseaseType: aiResult.diseaseType || 'Not applicable',
+        identifiedCrop: aiResult.identifiedCrop || null, // NEW: Store identified crop
+        severity: aiResult.severity || 0,
+        aiSource: 'openai-gpt-4o-mini',
+        analysisTime,
+        imagePaths: JSON.stringify(validImages.map(p => path.basename(p))),
+        riskLevel: aiResult.riskLevel || 'unknown',
+        additionalNotes: aiResult.additionalNotes || ''
+      };
+      
+      // Update database insert to include identified_crop:
       const detectionResult = await db.run(
-        `INSERT INTO detection (
+        `INSERT INTO detections (
           user_id, 
           category, 
           crop_type, 
+          identified_crop,
           description,
           status, 
           confidence, 
@@ -450,26 +466,31 @@ export const detectDisease = async (req, res) => {
           severity,
           ai_source,
           analysis_time,
-          image_paths
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          image_paths,
+          risk_level,
+          additional_notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          userId,
-          category,
-          cropType || null,
-          description || null,
-          aiResult.status,
-          aiResult.confidence,
-          aiResult.diseaseType || 'Unknown',
-          aiResult.severity || 0,
-          aiResult.source || 'unknown',
-          analysisTime,
-          JSON.stringify(validImages.map(p => path.basename(p)))
+          detectionData.userId,
+          detectionData.category,
+          detectionData.cropType,
+          detectionData.identifiedCrop,
+          detectionData.description,
+          detectionData.status,
+          detectionData.confidence,
+          detectionData.diseaseType,
+          detectionData.severity,
+          detectionData.aiSource,
+          detectionData.analysisTime,
+          detectionData.imagePaths,
+          detectionData.riskLevel,
+          detectionData.additionalNotes
         ]
       );
       
       const detectionId = detectionResult.lastID;
       
-      // Log recommendations
+      // Log recommendations if available
       if (aiResult.recommendations && aiResult.recommendations.length > 0) {
         for (const recommendation of aiResult.recommendations) {
           await db.run(
@@ -477,72 +498,155 @@ export const detectDisease = async (req, res) => {
             [detectionId, recommendation]
           );
         }
-      }
-      
-      // Log processing steps
-      if (aiResult.processingSteps && aiResult.processingSteps.length > 0) {
-        for (const step of aiResult.processingSteps) {
-          await db.run(
-            'INSERT INTO processing_steps (detection_id, step_name, completed, duration_ms) VALUES (?, ?, ?, ?)',
-            [detectionId, step.step, step.completed ? 1 : 0, step.duration || 0]
-          );
-        }
+      } else if (aiResult.isAgricultural === false) {
+        // Add default recommendation for non-agricultural images
+        await db.run(
+          'INSERT INTO recommendations (detection_id, recommendation) VALUES (?, ?)',
+          [detectionId, 'Upload agricultural images (crops, livestock, or fishery)']
+        );
+        await db.run(
+          'INSERT INTO recommendations (detection_id, recommendation) VALUES (?, ?)',
+          [detectionId, 'Ensure image is clear and well-lit']
+        );
       }
       
       await db.run('COMMIT');
-      console.log('[detectDisease] Transaction committed');
+      console.log('✅ Transaction committed - user charged');
       
-      // Prepare response
+      // Prepare image URLs for response
       const imageUrls = validImages.map(imgPath => {
         const filename = path.basename(imgPath);
         return `/uploads/${filename}`;
       });
-
-      console.log('[detectDisease] 📤 Preparing response for frontend');
       
-      const response = {
-        success: true,
-        data: {
-          id: detectionId,
-          timestamp: new Date().toISOString(),
-          images: imageUrls,
-          result: {
-            status: aiResult.status,
-            title: aiResult.title,
-            message: aiResult.message,
-            confidence: aiResult.confidence,
-            color: aiResult.color,
-            diseaseType: aiResult.diseaseType || 'Unknown',
-            severity: aiResult.severity || 0,
-            recommendations: aiResult.recommendations || [],
-            processingSteps: aiResult.processingSteps || [],
-            source: aiResult.source || 'unknown',
-            analysisTime: analysisTime
+      // Build response based on analysis result
+      let responseData;
+      
+      if (aiResult.isAgricultural === false) {
+        // Non-agricultural image response
+        responseData = {
+          success: true,
+          data: {
+            id: detectionId,
+            timestamp: new Date().toISOString(),
+            images: imageUrls,
+            result: {
+              status: 'rejected',
+              title: 'Non-Agricultural Image',
+              message: aiResult.message || 'This image does not appear to contain agricultural content. Please upload images of crops, livestock, or fishery subjects.',
+              confidence: 0,
+              color: 'gray',
+              diseaseType: 'Non-agricultural',
+              severity: 0,
+              riskLevel: 'none',
+              recommendations: [
+                'Upload images of crops, livestock, or fish',
+                'Ensure the subject is clearly visible',
+                'Crop the image to focus on agricultural elements'
+              ],
+              additionalNotes: 'This analysis used 1 credit.',
+              source: 'openai-gpt-4o-mini',
+              analysisTime: analysisTime,
+              isAgricultural: false,
+              isClear: aiResult.isClear || false
+            }
+          },
+          metadata: {
+            category: category,
+            cropType: cropType || null,
+            imagesAnalyzed: validImages.length,
+            creditsRemaining: user.credits - 1,
+            aiModel: 'GPT-4 Vision',
+            note: 'Credit deducted for service usage'
           }
-        },
-        metadata: {
-          category: category,
-          cropType: cropType || null,
-          description: description || null,
-          imagesAnalyzed: validImages.length,
-          creditsRemaining: user.credits - 1
-        }
-      };
-
-      console.log('[detectDisease] 📤 Response prepared');
+        };
+        
+      } else if (aiResult.isClear === false) {
+        // Unclear image response
+        responseData = {
+          success: true,
+          data: {
+            id: detectionId,
+            timestamp: new Date().toISOString(),
+            images: imageUrls,
+            result: {
+              status: 'unclear',
+              title: 'Image Quality Issue',
+              message: aiResult.message || 'The image quality is insufficient for reliable analysis. Please upload a clearer image.',
+              confidence: aiResult.confidence || 30,
+              color: 'yellow',
+              diseaseType: aiResult.diseaseType || 'Cannot determine',
+              severity: aiResult.severity || 0,
+              riskLevel: aiResult.riskLevel || 'unknown',
+              recommendations: aiResult.recommendations || [
+                'Upload a clearer, well-lit image',
+                'Ensure the subject is in focus',
+                'Avoid blurry or distant shots'
+              ],
+              additionalNotes: aiResult.additionalNotes || 'This analysis used 1 credit.',
+              source: 'openai-gpt-4o-mini',
+              analysisTime: analysisTime,
+              isAgricultural: true,
+              isClear: false
+            }
+          },
+          metadata: {
+            category: category,
+            cropType: cropType || null,
+            imagesAnalyzed: validImages.length,
+            creditsRemaining: user.credits - 1,
+            aiModel: 'GPT-4 Vision',
+            note: 'Credit deducted for service usage'
+          }
+        };
+        
+      } else {
+        // SUCCESS: Valid agricultural image analyzed
+        responseData = {
+          success: true,
+          data: {
+            id: detectionId,
+            timestamp: new Date().toISOString(),
+            images: imageUrls,
+            result: {
+              status: aiResult.status,
+              title: aiResult.title,
+              message: aiResult.message,
+              confidence: aiResult.confidence,
+              color: getColorForStatus(aiResult.status),
+              diseaseType: aiResult.diseaseType,
+              severity: aiResult.severity,
+              riskLevel: aiResult.riskLevel,
+              recommendations: aiResult.recommendations || [],
+              additionalNotes: aiResult.additionalNotes || '',
+              source: aiResult.source,
+              analysisTime: analysisTime,
+              isAgricultural: true,
+              isClear: true
+            }
+          },
+          metadata: {
+            category: category,
+            cropType: cropType || null,
+            imagesAnalyzed: validImages.length,
+            creditsRemaining: user.credits - 1,
+            aiModel: 'GPT-4 Vision',
+            note: 'Pure AI analysis - no mock data used'
+          }
+        };
+      }
       
-      // Clean up files
-      console.log('[detectDisease] Cleaning up uploaded files');
+      // Clean up files after success
       for (const filePath of validImages) {
         try { fs.unlinkSync(filePath); } catch {}
       }
       
-      console.log('[detectDisease] ✅ Sending result to client');
-      res.json(response);
+      console.log('✅ Sending result to client (user charged)');
+      res.json(responseData);
       
     } catch (dbError) {
       await db.run('ROLLBACK');
-      console.error('[detectDisease] Database error:', dbError);
+      console.error('Database error:', dbError);
       
       // Clean up files on error
       for (const filePath of validImages) {
@@ -551,22 +655,32 @@ export const detectDisease = async (req, res) => {
       
       res.status(500).json({
         success: false,
-        message: 'Failed to save analysis results',
-        error: dbError.message
+        message: 'Failed to save analysis results'
       });
     }
     
   } catch (error) {
-    console.error('[detectDisease] Unexpected error:', error);
+    console.error('Unexpected error:', error);
     
     res.status(500).json({
       success: false,
       message: 'Agricultural analysis failed',
-      error: error.message,
-      suggestion: 'Please try again with clearer images'
+      error: error.message
     });
   }
 };
+
+// Helper function for status colors
+function getColorForStatus(status) {
+  switch(status?.toLowerCase()) {
+    case 'healthy': return 'green';
+    case 'infected': return 'yellow';
+    case 'critical': return 'red';
+    case 'unclear': return 'yellow';
+    case 'rejected': return 'gray';
+    default: return 'blue';
+  }
+}
 
 /**
  * Generate fallback response when AI fails
