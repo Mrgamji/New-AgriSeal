@@ -3,8 +3,7 @@
    CONFIG
 ====================================================== */
 
-const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL || 'https://new-agriseal.onrender.com';
+const BACKEND_URL ='https://new-agriseal.onrender.com';
 
 /* ======================================================
    TYPES - UPDATED
