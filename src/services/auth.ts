@@ -1,7 +1,7 @@
 // frontend/src/services/api.ts
 import { DetectionResult, AnalysisRequest, RecommendationGroup } from '../types';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL ='https://new-agriseal.onrender.com';
 
 // Local helper to get auth token (don't import from auth.ts to avoid circular dependency)
 const getAuthToken = (): string => {
