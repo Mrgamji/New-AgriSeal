@@ -31,6 +31,11 @@ app.use(cors({
         'http://newagriseal.netlify.app',
         'https://agriseal.com.ng',
         'https://www.agriseal.com.ng',
+        'http://localhost', // Flutter web
+        'http://localhost:8080', // Flutter web port
+        'http://10.0.2.2:3000', // Android emulator localhost
+        'http://10.0.2.2', // Android emulator
+        'http://127.0.0.1', // iOS simulator
           
         process.env.FRONTEND_URL
       ].filter(Boolean);
